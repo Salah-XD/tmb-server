@@ -3,56 +3,80 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Http\Requests\Auth\LoginRequest;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
 {
-    public function store(Request $request)
+    /**
+     * Display the login view.
+     */
+    public function create(): View
+    {
+        return view('auth.login');
+    }
+
+    /**
+     * Handle an API login request and return a token.
+     */
+    public function login(Request $request)
     {
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required'
+            'password' => 'required',
         ]);
 
-        $user = User::where('email', $request->email)->first();
-
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return response()->json([
-                'message' => 'The provided credentials are incorrect.'
-            ], 401);
+        // Attempt login
+        if (!Auth::attempt($request->only('email', 'password'))) {
+            return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
-        // Create token with abilities based on role
-        $abilities = [];
-        switch ($user->role) {
-            case 0:
-                $abilities = ['admin'];
-                break;
-            case 1:
-                $abilities = ['hub'];
-                break;
-            case 2:
-                $abilities = ['agent'];
-                break;
-        }
+        // Get the authenticated user
+        $user = Auth::user();
 
-        $token = $user->createToken('auth-token', $abilities)->plainTextToken;
+        // Generate a token
+        $token = $user->createToken('API Token')->plainTextToken;
 
         return response()->json([
+            'user' => $user,
             'token' => $token,
-            'user' => $user
         ]);
     }
 
-    public function destroy(Request $request)
+    /**
+     * Handle a session-based login request (for web apps).
+     */
+    public function store(LoginRequest $request): RedirectResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        $request->authenticate();
 
-        return response()->json([
-            'message' => 'Successfully logged out'
-        ]);
+        $request->session()->regenerate();
+
+        // Redirect users based on their roles
+        $authUserRole = Auth::user()->role;
+
+        if ($authUserRole == 0) {
+            return redirect()->intended(route('admin', absolute: false));
+        } elseif ($authUserRole == 1) {
+            return redirect()->intended(route('hub', absolute: false));
+        } else {
+            return redirect()->intended(route('dashboard', absolute: false));
+        }
+    }
+
+    /**
+     * Destroy an authenticated session.
+     */
+    public function destroy(Request $request): RedirectResponse
+    {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect('/');
     }
 }

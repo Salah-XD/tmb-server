@@ -5,8 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\HubController;
 use App\Http\Controllers\AgentController;
 
-Route::apiResource('hubs', HubController::class);
-Route::apiResource('agents', AgentController::class);
+
 
 Route::get('/', function () {
     return view('welcome');

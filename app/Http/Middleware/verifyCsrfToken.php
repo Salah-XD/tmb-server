@@ -10,7 +10,6 @@ class VerifyCsrfToken extends Middleware
     protected $addHttpCookie = true;
 
    protected $except = [
-    'hubs',
-    'agents',
+    'api/*',
 ];
 }
