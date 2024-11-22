@@ -2,98 +2,95 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Agent;
-use App\Models\Hub;
+use App\Http\Resources\AgentResource;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymateResourceCollection;
+use Illuminate\Http\JsonResponse;
+use Exception;
 
 class AgentController extends Controller
 {
     /**
-     * Display a listing of the agents.
+     * Get all agents.
+     *
+     * @return AnonymateResourceCollection|JsonResponse
      */
     public function index()
     {
-        $agents = Agent::all();
-        return response()->json($agents);
+        try {
+            $agents = Agent::query()
+                ->latest()
+                ->get();
+
+            return AgentResource::collection($agents)
+                ->additional(['status' => 'success']);
+
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch agents',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
-     * Store a newly created agent in storage.
+     * Get agents by hub ID.
+     *
+     * @param int $hub_id
+     * @return AnonymateResourceCollection|JsonResponse
+     */
+    public function getAgentsByHub($hub_id)
+    {
+        try {
+            $agents = Agent::query()
+                ->where('hub_id', $hub_id)
+                ->latest()
+                ->get();
+
+            return AgentResource::collection($agents)
+                ->additional(['status' => 'success']);
+
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch agents for the specified hub',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Store a new agent.
+     *
+     * @param Request $request
+     * @return AgentResource|JsonResponse
      */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'agent_name' => 'required|string|max:255',
-            'agent_phonenumber' => 'required|string|max:20|unique:agents',
-            'balance_credit' => 'required|numeric|min:0',
-            'hub_id' => 'required|exists:hubs,id',
-        ]);
+        try {
+            $validated = $request->validate([
+                'agent_name' => 'required|string|max:255',
+                'agent_phonenumber' => 'required|string|max:20|unique:agents',
+                'balance_credit' => 'required|numeric|min:0',
+                'hub_id' => 'required|exists:hubs,id',
+            ]);
 
-        $agent = Agent::create($validated);
-        return response()->json($agent, 201);
-    }
+            $agent = Agent::create($validated);
 
-    /**
-     * Display the specified agent.
-     */
-    public function show($id)
-    {
-        $agent = Agent::findOrFail($id);
-        return response()->json($agent);
-    }
+            return (new AgentResource($agent))
+                ->additional([
+                    'status' => 'success',
+                    'message' => 'Agent created successfully'
+                ]);
 
-    /**
-     * Update the specified agent in storage.
-     */
-    public function update(Request $request, $id)
-    {
-        $agent = Agent::findOrFail($id);
-
-        $validated = $request->validate([
-            'agent_name' => 'sometimes|string|max:255',
-            'agent_phonenumber' => 'sometimes|string|max:20|unique:agents,agent_phonenumber,' . $agent->id,
-            'balance_credit' => 'sometimes|numeric|min:0',
-            'hub_id' => 'sometimes|exists:hubs,id',
-        ]);
-
-        $agent->update($validated);
-        return response()->json($agent);
-    }
-
-    /**
-     * Remove the specified agent from storage.
-     */
-    public function destroy($id)
-    {
-        $agent = Agent::findOrFail($id);
-        $agent->delete();
-
-        return response()->json(['message' => 'Agent deleted successfully']);
-    }
-
-    /**
-     * Add credit to the agent.
-     */
-    public function addCredit($id, Request $request)
-    {
-        $request->validate([
-            'credit' => 'required|numeric|min:0',
-        ]);
-
-        $agent = Agent::findOrFail($id);
-        $hub = Hub::findOrFail($agent->hub_id);
-
-        if ($hub->balance_credit < $request->credit) {
-            return response()->json(['error' => 'Insufficient hub balance'], 400);
+        } catch (Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to create agent',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        // Deduct from hub and add to agent
-        $hub->balance_credit -= $request->credit;
-        $hub->save();
-
-        $agent->balance_credit += $request->credit;
-        $agent->save();
-
-        return response()->json(['agent' => $agent, 'hub' => $hub]);
     }
 }
